@@ -43,14 +43,15 @@ class HexUtils {
     if ((len & 0x01) != 0) {
       throw new Exception("Odd number of characters.");
     }
-    List<int> out = new List(len >> 1);
+    List<int> out = [];// List(len >> 1);
     // two characters form the hex value.
     for (int i = 0, j = 0; j < len; i++) {
       int f = toDigit(data.codeUnitAt(j)) << 4;
       j++;
       f = f | toDigit(data.codeUnitAt(j));
       j++;
-      out[i] = (f & 0xFF);
+      out.add((f & 0xFF));
+      // out[i] = (f & 0xFF);
     }
     return out;
   }

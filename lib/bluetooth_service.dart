@@ -1,6 +1,10 @@
-import 'package:flutter_wechat_ble/flutter_wechat_ble.dart';
 import 'dart:async';
 import 'dart:math';
+
+import 'package:flutter_wechat_ble/bluetooth_service.dart';
+
+import 'flutter_wechat_ble.dart';
+import 'utils.dart';
 
 typedef void OnServiceDeviceStateChangeCallback(BluetoothServiceDevice device);
 typedef void OnServiceDeviceFoundCallback(BluetoothServiceDevice device);
@@ -13,35 +17,35 @@ const int kMaxConnectRetryCount = 10;
 
 abstract class BleDeviceConfig extends DeviceConfig {
   //the default service id want to communicate
-  final String serviceId;
+  final String? serviceId;
 
   //the default notify characteristics id
   // 设置之后，将会自动将本id对应的特征值设置通知模式
-  final String notifyId;
+  final String? notifyId;
 
   //the default write characteristics id
-  final String writeId;
+  final String? writeId;
 
   BleDeviceConfig(
       {this.serviceId,
-      this.notifyId,
-      this.writeId,
-      bool checkServicesAndCharacteristics = false,
-      bool enable = true,
-      String tag,
-      Duration connectTimeout = const Duration(seconds: kConnectTimeout),
-      Duration dataTimeout = const Duration(milliseconds: kDataTimeout),
-      Duration connectRetryInterval =
-          const Duration(milliseconds: kConnectRetryInterval),
-      int connectRetryCount = kConnectRetryCount})
+        this.notifyId,
+        this.writeId,
+        bool checkServicesAndCharacteristics = false,
+        bool enable = true,
+        String tag = "",
+        Duration connectTimeout = const Duration(seconds: kConnectTimeout),
+        Duration dataTimeout = const Duration(milliseconds: kDataTimeout),
+        Duration connectRetryInterval =
+        const Duration(milliseconds: kConnectRetryInterval),
+        int connectRetryCount = kConnectRetryCount})
       : super(
-            tag: tag,
-            checkServicesAndCharacteristics: checkServicesAndCharacteristics,
-            connectTimeout: connectTimeout,
-            dataTimeout: dataTimeout,
-            enable: enable,
-            connectRetryInterval: connectRetryInterval,
-            connectRetryCount: connectRetryCount);
+      tag: tag,
+      checkServicesAndCharacteristics: checkServicesAndCharacteristics,
+      connectTimeout: connectTimeout,
+      dataTimeout: dataTimeout,
+      enable: enable,
+      connectRetryInterval: connectRetryInterval,
+      connectRetryCount: connectRetryCount);
 
   @override
   BluetoothServiceDevice createBleServiceDevice(
@@ -55,7 +59,7 @@ abstract class DeviceConfig {
   final bool checkServicesAndCharacteristics;
 
   // tag to id the device
-  final String tag;
+  final String? tag;
 
   // time out of send data and receive data
   final Duration dataTimeout;
@@ -63,20 +67,20 @@ abstract class DeviceConfig {
   // time out of connect to device
   final Duration connectTimeout;
 
-  final Duration connectRetryInterval;
+  final Duration? connectRetryInterval;
 
   final int connectRetryCount;
 
   bool enable;
 
   DeviceConfig(
-      {this.checkServicesAndCharacteristics,
-      this.connectTimeout,
-      this.dataTimeout,
-      this.connectRetryCount,
-      this.connectRetryInterval,
-      this.enable,
-      this.tag});
+      {this.checkServicesAndCharacteristics = false,
+        required this.connectTimeout,
+        required this.dataTimeout,
+        this.connectRetryCount = 0,
+        this.connectRetryInterval,
+        this.enable = false,
+        this.tag});
 
   // is the device acceptable?
   bool accept(BleDevice device);
@@ -84,7 +88,7 @@ abstract class DeviceConfig {
   void onExtraPack(BluetoothServiceBleDevice device, HexValue value) {}
 
   /// handle the package logic
-  HexValue onValueChange(BluetoothServiceBleDevice device, BleValue value);
+  HexValue? onValueChange(BluetoothServiceBleDevice device, BleValue value);
 
   // create the service device
   BluetoothServiceDevice createBleServiceDevice(
@@ -93,7 +97,7 @@ abstract class DeviceConfig {
   dynamic onStartup(BluetoothService service, BluetoothServiceDevice device) {}
 
   // called when the device is closed and released
-  void onClose(BluetoothService service, BluetoothServiceDevice device) {}
+  Future<void> onClose(BluetoothService service, BluetoothServiceDevice device) async {}
 }
 
 ///
@@ -106,15 +110,15 @@ abstract class BluetoothServiceDevice {
   // this value will be changed when connection state changed
   bool connected;
 
-  BluetoothServiceDevice({this.device, this.config, this.connected = false});
+  BluetoothServiceDevice({required this.device, required this.config, this.connected = false});
 
   void onReceiveData(BleValue value);
 
   // connect tot the device and do other prepare work
   dynamic startup();
 
-  String get deviceId => device.deviceId;
-  String get name => device.name;
+  String get deviceId => device.deviceId??"";
+  String get name => device.name??"";
 
   Future close();
 
@@ -132,7 +136,7 @@ abstract class HexValue {
 
 class StringHexValue extends HexValue {
   final String _string;
-  List<int> _bytes;
+  List<int>? _bytes;
 
   StringHexValue(String string) : _string = string;
 
@@ -141,7 +145,7 @@ class StringHexValue extends HexValue {
     if (_bytes == null) {
       _bytes = HexUtils.decodeHex(_string);
     }
-    return _bytes;
+    return _bytes!;
   }
 
   @override
@@ -150,7 +154,7 @@ class StringHexValue extends HexValue {
 
 class BytesHexValue extends HexValue {
   final List<int> _value;
-  String _string;
+  String? _string;
 
   BytesHexValue(List<int> value) : _value = value;
 
@@ -162,7 +166,7 @@ class BytesHexValue extends HexValue {
     if (_string == null) {
       _string = HexUtils.encodeHex(_value);
     }
-    return _string;
+    return _string!;
   }
 }
 
@@ -186,7 +190,7 @@ class DeviceBuffer {
   }
 
   HexValue copyValue() {
-    return new BytesHexValue(new List<int>()..addAll(buffer));
+    return new BytesHexValue([]..addAll(buffer));
   }
 
   void clear() {
@@ -201,11 +205,11 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
   dynamic tag;
 
   // user define value
-  int packageCount;
+  // int packageCount;
 
   final BleDeviceConfig _config;
 
-  BluetoothServiceBleDevice({BleDevice device, BleDeviceConfig config})
+  BluetoothServiceBleDevice({required BleDevice device, required BleDeviceConfig config})
       : _config = config,
         super(device: device, config: config);
 
@@ -236,11 +240,11 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
   void onReceiveData(BleValue value) async {
     try {
       print("receive data : ${value.value}");
-      HexValue result = await config.onValueChange(this, value);
+      HexValue? result = config.onValueChange(this, value);
       if (result != null) {
         if (_completer != null) {
           //report the data
-          Completer<HexValue> completer = this._completer;
+          Completer<HexValue> completer = this._completer!;
           this._completer = null;
           completer.complete(result);
         } else {
@@ -250,7 +254,7 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
       }
     } catch (e) {
       if (_completer != null) {
-        Completer<HexValue> completer = this._completer;
+        Completer<HexValue> completer = this._completer!;
         this._completer = null;
         completer.completeError(e);
       }
@@ -271,11 +275,11 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
 
     // get services
     List<BleService> services =
-        await FlutterWechatBle.getBLEDeviceServices(deviceId: deviceId);
+    await FlutterWechatBle.getBLEDeviceServices(deviceId: deviceId);
     for (BleService service in services) {
       List<BleCharacteristic> characterisrics =
-          await FlutterWechatBle.getBLEDeviceCharacteristics(
-              deviceId: deviceId, serviceId: service.uuid);
+      await FlutterWechatBle.getBLEDeviceCharacteristics(
+          deviceId: deviceId, serviceId: service.uuid??"");
     }
 
     if (_config.checkServicesAndCharacteristics) {
@@ -285,13 +289,13 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
       for (BleService service in services) {
         if (service.uuid == _config.serviceId) {
           serviceOk = true;
-          for (BleCharacteristic characteristic in service.characteristics) {
+          for (BleCharacteristic characteristic in service.characteristics!) {
             if (characteristic.uuid == _config.writeId &&
-                characteristic.write) {
+                (characteristic.write??false)) {
               writeOk = true;
             }
             if (characteristic.uuid == _config.notifyId &&
-                characteristic.notify) {
+                (characteristic.notify??false)) {
               notifyOk = true;
             }
           }
@@ -316,11 +320,11 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
     }
 
     await setNotify(
-        serviceId: _config.serviceId, characteristicId: _config.notifyId);
+        serviceId: _config.serviceId??"", characteristicId: _config.notifyId??"");
   }
 
   // close the device
-  Future close() async {
+  Future<void> close() async {
     try {
       //call the onDataTimeout in order to avoid memory leak
       await _onDataTimeout();
@@ -332,8 +336,8 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
     await FlutterWechatBle.closeBLEConnection(deviceId: deviceId);
   }
 
-  void setNotify(
-      {String serviceId, String characteristicId, bool state = true}) async {
+  Future<void> setNotify(
+      {required String serviceId, required String characteristicId, bool state = true}) async {
     await FlutterWechatBle.notifyBLECharacteristicValueChange(
         deviceId: deviceId,
         serviceId: serviceId,
@@ -344,14 +348,14 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
   Future writeValue(String serviceId, String characteristicId, var value) {
     return FlutterWechatBle.writeBLECharacteristicValue(
         deviceId: deviceId,
-        serviceId: _config.serviceId,
-        characteristicId: _config.writeId,
+        serviceId: _config.serviceId??"",
+        characteristicId: _config.writeId??"",
         value: value);
   }
 
   // waiting for receive a whole package
-  Completer<HexValue> _completer;
-  Timer _timer;
+  Completer<HexValue>? _completer;
+  Timer? _timer;
   // write the value to the devices the value must be a whole package
   // we handle the package logic in DeviceConfig {@see DeviceConfig}
   Future<HexValue> write(var value) {
@@ -361,22 +365,22 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
     }
     _completer = new Completer<HexValue>();
     _timer = new Timer(_config.dataTimeout, _onDataTimeout);
-    _completer.future;
-    writeValue(_config.serviceId, _config.writeId, value);
-    return _completer.future;
+    _completer!.future;
+    writeValue(_config.serviceId??"", _config.writeId??"", value);
+    return _completer!.future;
   }
 
   _onSuccess(HexValue value) {
     if (_timer != null) {
-      _timer.cancel();
+      _timer?.cancel();
       _timer = null;
     }
     return value;
   }
 
-  void _onDataTimeout() {
+  Future<void> _onDataTimeout() async{
     if (_completer != null) {
-      Completer<HexValue> completer = this._completer;
+      Completer<HexValue> completer = this._completer!;
       this._completer = null;
       completer.completeError(new TimeoutException("Data timeout"));
     }
@@ -386,7 +390,7 @@ class BluetoothServiceBleDevice extends BluetoothServiceDevice {
 
   @override
   Future writeWithoutReturnData(value) {
-    return writeValue(_config.serviceId, _config.writeId, value);
+    return writeValue(_config.serviceId??"", _config.writeId??"", value);
   }
 }
 
@@ -394,7 +398,7 @@ class BluetoothService {
   List<DeviceConfig> _configs;
   Map<String, BluetoothServiceDevice> _serviceDevices = {};
 
-  static BluetoothService _instance;
+  static late BluetoothService _instance;
 
   static BluetoothService getInstance() {
     return _instance;
@@ -406,7 +410,7 @@ class BluetoothService {
   }
 
   BluetoothService._({
-    List<DeviceConfig> configs,
+    required List<DeviceConfig> configs,
   }) : this._configs = configs;
 
   void setConfigs(List<DeviceConfig> configs) {
@@ -422,18 +426,8 @@ class BluetoothService {
         .where((BluetoothServiceDevice device) => device.connected);
   }
 
-  // 使得所有配置可用
-  void enableAll(){
-    _configs.forEach((DeviceConfig config)=>config.enable=true);
-  }
-
-  // 使得所有配置不可用
-  void disableAll(){
-    _configs.forEach((DeviceConfig config)=>config.enable=false);
-  }
-
   // 通过配置的下标后者标志(tag)来控制是否启用
-  void setEnable({int index, bool enable: true, String tag}) {
+  void setEnable({int? index, bool enable: true, String? tag}) {
     if (index != null) {
       if (index < 0 || index >= _configs.length) {
         throw new AssertionError("index is not correct");
@@ -448,7 +442,7 @@ class BluetoothService {
 
   BluetoothServiceDevice createBleDevice(
       BleDevice device, DeviceConfig config) {
-    return new BluetoothServiceBleDevice(device: device, config: config);
+    return new BluetoothServiceBleDevice(device: device, config: config as BleDeviceConfig);
   }
 
   Future startScan() async {
@@ -461,22 +455,22 @@ class BluetoothService {
   }
 
   void _onBLEConnectionStateChange(String deviceId, bool connected) {
-    BluetoothServiceDevice device = getDeviceById(deviceId);
+    BluetoothServiceDevice? device = getDeviceById(deviceId);
     if (device == null) {
       throw new AssertionError("Cannot find device :$deviceId");
     }
     device.connected = connected;
     if (_onServiceDeviceStateChangeCallback != null) {
-      _onServiceDeviceStateChangeCallback(device);
+      _onServiceDeviceStateChangeCallback?.call(device);
     }
   }
 
-  void stopScan() async {
+  Future<void> stopScan() async {
     await FlutterWechatBle.stopBluetoothDevicesDiscovery();
   }
 
-  OnServiceDeviceFoundCallback _onServiceDeviceFoundCallback;
-  OnServiceDeviceStateChangeCallback _onServiceDeviceStateChangeCallback;
+  OnServiceDeviceFoundCallback? _onServiceDeviceFoundCallback;
+  OnServiceDeviceStateChangeCallback? _onServiceDeviceStateChangeCallback;
 
   void onServiceDeviceFound(OnServiceDeviceFoundCallback callback) {
     _onServiceDeviceFoundCallback = callback;
@@ -487,7 +481,7 @@ class BluetoothService {
   }
 
   void _onBLECharacteristicValueChange(BleValue value) {
-    BluetoothServiceDevice device = getDeviceById(value.deviceId);
+    BluetoothServiceDevice? device = getDeviceById(value.deviceId??"");
     if (device == null) {
       throw new AssertionError(
           "Cannot find device ${value.deviceId} when receiving data");
@@ -495,13 +489,13 @@ class BluetoothService {
     device.onReceiveData(value);
   }
 
-  BluetoothServiceDevice getDeviceById(String deviceId) {
+  BluetoothServiceDevice? getDeviceById(String deviceId) {
     return _serviceDevices[deviceId];
   }
 
   /// startup device
   dynamic startupDevice(String deviceId) async {
-    BluetoothServiceDevice serviceDevice = getDeviceById(deviceId);
+    BluetoothServiceDevice? serviceDevice = getDeviceById(deviceId);
     if (serviceDevice == null) {
       throw new AssertionError("Cannot find device by id :${deviceId}");
     }
@@ -514,10 +508,10 @@ class BluetoothService {
     for (DeviceConfig config in _configs) {
       if (config.enable && config.accept(device)) {
         BluetoothServiceDevice serviceDevice =
-            config.createBleServiceDevice(this, device, config);
-        this._serviceDevices[device.deviceId] = serviceDevice;
+        config.createBleServiceDevice(this, device, config);
+        this._serviceDevices[device.deviceId??""] = serviceDevice;
         if (_onServiceDeviceFoundCallback != null) {
-          _onServiceDeviceFoundCallback(serviceDevice);
+          _onServiceDeviceFoundCallback?.call(serviceDevice);
         }
 
         break;
@@ -525,8 +519,8 @@ class BluetoothService {
     }
   }
 
-  void shutdownDevice(String deviceId) async {
-    BluetoothServiceDevice serviceDevice = getDeviceById(deviceId);
+  Future<void> shutdownDevice(String deviceId) async {
+    BluetoothServiceDevice? serviceDevice = getDeviceById(deviceId);
     if (serviceDevice == null) {
       throw new AssertionError("Cannot find device by id :${deviceId}");
     }
